@@ -1,15 +1,15 @@
-import { signUpAction } from "@/app/actions";
+// app/(auth-pages)/sign-up/page.tsx
 import { FormMessage, Message } from "@/components/form-message";
 import { SubmitButton } from "@/components/submit-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { SmtpMessage } from "../smtp-message";
+import TwitterLoginButton from "@/app/components/TwitterLoginButton"; // Import Twitter button
 
-export default async function Signup(props: {
-  searchParams: Promise<Message>;
-}) {
+export default async function Signup(props: { searchParams: Promise<Message> }) {
   const searchParams = await props.searchParams;
+
   if ("message" in searchParams) {
     return (
       <div className="w-full flex-1 flex items-center h-screen sm:max-w-md justify-center gap-2 p-4">
@@ -39,12 +39,18 @@ export default async function Signup(props: {
             minLength={6}
             required
           />
-          <SubmitButton formAction={signUpAction} pendingText="Signing up...">
+          <SubmitButton pendingText="Signing up...">
             Sign up
           </SubmitButton>
           <FormMessage message={searchParams} />
         </div>
       </form>
+
+      {/* Twitter Login Button */}
+      <div className="mt-4 flex justify-center">
+        <TwitterLoginButton />
+      </div>
+
       <SmtpMessage />
     </>
   );
