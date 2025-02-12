@@ -1,9 +1,17 @@
-export default async function Layout({
+// app/layout.tsx
+import "@/app/globals.css"; // Correct path
+import { Inter } from "next/font/google";
+
+const inter = Inter({ subsets: ["latin"] });
+
+export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
-    <div className="max-w-7xl flex flex-col gap-12 items-start">{children}</div>
+    <html lang="en" className={inter.className}>
+      <body>{children}</body>
+    </html>
   );
 }

@@ -2,7 +2,8 @@
 
 import { encodedRedirect } from "@/utils/utils";
 import { createClient } from "@/utils/supabase/server";
-import { headers } from "next/headers";
+import { headers, cookies } from "next/headers";
+import { NextResponse } from "next/server";
 import { redirect } from "next/navigation";
 
 const supabase = createClient();
@@ -16,7 +17,7 @@ export const handleSignup = async (formData: FormData) => {
     return encodedRedirect("error", "/sign-up", "Email and password are required");
   }
 
-  const { error } = await supabase.auth.signUp({
+  const { data: { session }, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
@@ -25,15 +26,26 @@ export const handleSignup = async (formData: FormData) => {
   });
 
   if (error) {
-    console.error(error.code + " " + error.message);
     return encodedRedirect("error", "/sign-up", error.message);
   }
 
-  return encodedRedirect(
-    "success",
-    "/sign-up",
-    "Thanks for signing up! Please check your email for a verification link."
-  );
+  // Check for cookie consent before setting cookies
+  const consent = cookies().get("cookie-consent")?.value;
+  if (consent === "accepted" && session) {
+    const cookieStore = cookies();
+    cookieStore.set("sb-access-token", session.access_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+    });
+    cookieStore.set("sb-refresh-token", session.refresh_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+    });
+  }
+
+  return redirect("/protected");
 };
 
 export const handleSignin = async (formData: FormData) => {
@@ -44,7 +56,7 @@ export const handleSignin = async (formData: FormData) => {
     return encodedRedirect("error", "/sign-in", "Email and password are required");
   }
 
-  const { error } = await supabase.auth.signInWithPassword({
+  const { data: { session }, error } = await supabase.auth.signInWithPassword({
     email,
     password,
   });
@@ -53,25 +65,40 @@ export const handleSignin = async (formData: FormData) => {
     return encodedRedirect("error", "/sign-in", error.message);
   }
 
-  return redirect("/dashboard");
+  // Check for cookie consent before setting cookies
+  const consent = cookies().get("cookie-consent")?.value;
+  if (consent === "accepted" && session) {
+    const cookieStore = cookies();
+    cookieStore.set("sb-access-token", session.access_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+    });
+    cookieStore.set("sb-refresh-token", session.refresh_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+    });
+  }
+
+  return redirect("/protected");
 };
 
-export const handleTwitterLogin = async () => {
+// Twitter OAuth Login
+export const handleTwitterLogin = async (): Promise<void> => {
   const origin = (await headers()).get("origin");
-  
-  const { error } = await supabase.auth.signInWithOAuth({
+
+  const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "twitter",
     options: {
-      redirectTo: `${origin}/dashboard`, // Ensure dashboard is correct for Twitter auth
+      // Redirect to /auth/callback with a query parameter directing to /loading
+      redirectTo: `${origin}/auth/callback?redirect_to=/loading`,
     },
   });
 
   if (error) {
-    console.error("Twitter login error:", error.message);
-    return encodedRedirect("error", "/sign-in", "Twitter login failed");
+    redirect("/sign-in?error=" + encodeURIComponent("Twitter login failed"));
   }
-
-  return redirect("/dashboard");
 };
 
 export const handleForgotPassword = async (formData: FormData) => {
@@ -87,7 +114,6 @@ export const handleForgotPassword = async (formData: FormData) => {
   });
 
   if (error) {
-    console.error(error.message);
     return encodedRedirect("error", "/forgot-password", "Could not reset password");
   }
 
@@ -103,35 +129,32 @@ export const handleResetPassword = async (formData: FormData) => {
   const confirmPassword = formData.get("confirmPassword")?.toString();
 
   if (!password || !confirmPassword) {
-    return encodedRedirect(
-      "error",
-      "/protected/reset-password",
-      "Password and confirm password are required"
-    );
+    return encodedRedirect("error", "/protected/reset-password", "Password and confirm password are required");
   }
 
   if (password !== confirmPassword) {
-    return encodedRedirect(
-      "error",
-      "/protected/reset-password",
-      "Passwords do not match"
-    );
+    return encodedRedirect("error", "/protected/reset-password", "Passwords do not match");
   }
 
   const { error } = await supabase.auth.updateUser({ password });
 
   if (error) {
-    return encodedRedirect(
-      "error",
-      "/protected/reset-password",
-      "Password update failed"
-    );
+    return encodedRedirect("error", "/protected/reset-password", "Password update failed");
   }
 
   return encodedRedirect("success", "/protected/reset-password", "Password updated");
 };
 
 export const handleSignOut = async () => {
-  await supabase.auth.signOut();
+  const { error } = await supabase.auth.signOut();
+
+  if (error) {
+    console.error("Logout error:", error.message);
+  }
+
+  const cookieStore = cookies();
+  cookieStore.set("sb-access-token", "", { path: "/", expires: new Date(0) });
+  cookieStore.set("sb-refresh-token", "", { path: "/", expires: new Date(0) });
+
   return redirect("/sign-in");
 };
